@@ -3,6 +3,7 @@ from functools import partial
 import spconv
 import torch.nn as nn
 import torch
+import numpy as np
 
 
 def post_act_block(in_channels, out_channels, kernel_size, indice_key=None, stride=1, padding=0,
@@ -262,9 +263,31 @@ class VoxelResBackBone8x(nn.Module):
         return batch_dict
 
 def sum_duplicates(t1, t2):
-    new_indices, inverse_mapping, count = torch.unqiue(torch.cat(t1.indices,t2.indices),dim=0, return_inverse=True, return_counts=True)
-    new_features = torch.zeros((new_indices.size()[0], t1.features.size()[1]))
-    t1.index()
+    comb_feat =  torch.cat((t1.features, t2.features), dim=0)
+    comb_inds =  torch.cat((t1.indices, t2.indices), dim=0)
+
+    new_indices, inverse_mapping, count = torch.unique(comb_inds, dim=0, sorted=True, return_inverse=True, return_counts=True)
+    index_of_unique =  torch.zeros(len(new_indices), dtype=torch.long, device=comb_inds.device)
+    index_of_unique[inverse_mapping] = torch.arange(len(comb_inds), dtype=torch.long, device=comb_inds.device)
+
+    new_features = comb_feat[index_of_unique]
+
+    comb_inds[index_of_unique] = -1
+    dup_indices, dup_inverse_mapping, dup_count = torch.unique(comb_inds, dim=0, sorted=True, return_inverse=True, return_counts=True)
+    
+    dup_index_of_unique =  torch.zeros(len(dup_indices), dtype=torch.long, device=comb_inds.device)
+    dup_index_of_unique[dup_inverse_mapping] = torch.arange(len(comb_inds), dtype=torch.long, device=comb_inds.device)
+    # need to remove our dummy variable (off by one)
+    dup_index_of_unique = dup_index_of_unique[1:]
+    dup_feat = comb_feat[dup_index_of_unique]
+    
+    #print("LEN ", dup_feat.size())
+    #print("SC ", (count>1).sum())
+    #print("LC ", (count>1).size())
+    #print("LF ", (new_features).size())
+    
+    new_features[count>1]  += dup_feat
+    return new_indices, new_features
 
 class VoxelBackBoneHiRes(nn.Module):
     def __init__(self, model_cfg, input_channels, grid_size, **kwargs):
@@ -411,7 +434,7 @@ class VoxelBackBoneHiRes(nn.Module):
         self.final_convs_3 = spconv.SparseConv3d(16*2**(J-1)*2**(I-1),16*2**3,1)
 
     def forward(self, batch_dict):
-        print("FORWARD?")
+        #("FORWARD?")
         """
         Args:
             batch_dict:
@@ -477,7 +500,7 @@ class VoxelBackBoneHiRes(nn.Module):
         J = len(pyramids[0])
         for i in list(range(I))[::-1]:
             for j in list(range(J))[::-1]: 
-                print(i, j)
+                #print(i, j)
                 base = obo_convs[i][j](pyramids[i][j])
                 if i != I-1:
                     pass
@@ -488,18 +511,24 @@ class VoxelBackBoneHiRes(nn.Module):
                     up = self.pool_2(up)
                     up.indices =  up.indices * torch.tensor([1,  2, 2, 2], device=base.features.device, dtype=torch.int32)
 
-                    print(base.indices.size())
-                    print(torch.unique(base.indices, dim=0).size())
-                    print(up.indices.size())
-                    print(torch.unique(up.indices, dim=0).size())
+                    #print(base.indices.size())
+                    #print(torch.unique(base.indices, dim=0).size())
+                    #print(up.indices.size())
+                    #print(torch.unique(up.indices, dim=0).size())
 
-                    print (torch.max(up.indices, dim=0))
-                    print (torch.max(base.indices, dim=0))
+                    #print (torch.max(up.indices, dim=0))
+                    #print (torch.max(base.indices, dim=0))
 
-                    base.features =  torch.cat((base.features, up.features), dim = 0)
-                    base.indices =  torch.cat((base.indices, up.indices), dim = 0)
-                    print(base.indices.size())
-                    print(torch.unique(base.indices, dim=0).size())
+                    #base.features =  torch.cat((base.features, up.features), dim=0)
+                    #base.indices =  torch.cat((base.indices, up.indices), dim=0)
+
+                    comb_inds, comb_feat =  sum_duplicates(base, up)
+                    base.indices = comb_inds
+                    base.features = comb_feat
+
+
+                    #print(base.indices.size())
+                    #print(torch.unique(base.indices, dim=0).size())
                 if j != J-1:
                     pass
                     #base  += nn.Upsample(size=base.size()[2:], mode='nearest')(pyramids[i][j+1])
