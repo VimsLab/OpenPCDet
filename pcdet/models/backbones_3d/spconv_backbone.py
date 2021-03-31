@@ -294,107 +294,120 @@ class VoxelBackBoneHiRes(nn.Module):
         super().__init__()
         self.alpha = 0.5 # hardcoded
         self.model_cfg = model_cfg
+        pyramid_cfg = self.model_cfg.PYRAMID_CONFIG
         self.sparse_shape = grid_size[::-1] + [1, 0, 0]
 
         alpha = 0.5
         level = 0
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
         sf = int(1/alpha**level)
-        pool = spconv.SparseMaxPool3d(sf, sf)
+        pool = spconv.SparseMaxPool3d(sf, sf, padding=sf//2)
         self.l0_conv_input = spconv.SparseSequential(
             pool,
-            spconv.SubMConv3d(input_channels, 16*sf, 3, padding=1, bias=False, indice_key='subm1'),
-            norm_fn(16*sf),
+            spconv.SubMConv3d(input_channels, 16, 3, padding=1, bias=False, indice_key='subm1'),
+            norm_fn(16),
             nn.ReLU(),
         )
         block = post_act_block
         self.l0_conv1 = spconv.SparseSequential(
-            block(16*sf, 16*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm1'),
+            block(16, 16, 3, norm_fn=norm_fn, padding=1, indice_key='subm1'),
         )
         self.l0_conv2 = spconv.SparseSequential(
             # [1600, 1408, 41] <- [800, 704, 21]
-            block(16*sf, 32*sf, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv2', conv_type='spconv'),
-            block(32*sf, 32*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
-            block(32*sf, 32*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
+            block(16, 32, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv2', conv_type='spconv'),
+            block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
+            block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
         )
         self.l0_conv3 = spconv.SparseSequential(
             # [800, 704, 21] <- [400, 352, 11]
-            block(32*sf, 64*sf, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv3', conv_type='spconv'),
-            block(64*sf, 64*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
-            block(64*sf, 64*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
+            block(32, 64, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv3', conv_type='spconv'),
+            block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
+            block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
         )
         self.l0_conv4 = spconv.SparseSequential(
             # [400, 352, 11] <- [200, 176, 5]
-            block(64*sf, 128*sf, 3, norm_fn=norm_fn, stride=2, padding=(0, 1, 1), indice_key='spconv4', conv_type='spconv'),
-            block(128*sf, 128*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
-            block(128*sf, 128*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
+            block(64, 128, 3, norm_fn=norm_fn, stride=2, padding=(0, 1, 1), indice_key='spconv4', conv_type='spconv'),
+            block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
+            block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
         )
 
         level = 1
-        norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
-        sf = int(1/alpha**level)
-        pool = spconv.SparseMaxPool3d(sf, sf, padding=sf//2)
-        self.l1_conv_input = spconv.SparseSequential(
-            pool,
-            spconv.SubMConv3d(input_channels, 16*sf, 3, padding=1, bias=False, indice_key='subm1'),
-            norm_fn(16*sf),
-            nn.ReLU(),
-        )
-        block = post_act_block
-        self.l1_conv1 = spconv.SparseSequential(
-            block(16*sf, 16*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm1'),
-        )
-        self.l1_conv2 = spconv.SparseSequential(
-            # [1600, 1408, 41] <- [800, 704, 21]
-            block(16*sf, 32*sf, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv2', conv_type='spconv'),
-            block(32*sf, 32*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
-            block(32*sf, 32*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
-        )
-        self.l1_conv3 = spconv.SparseSequential(
-            # [800, 704, 21] <- [400, 352, 11]
-            block(32*sf, 64*sf, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv3', conv_type='spconv'),
-            block(64*sf, 64*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
-            block(64*sf, 64*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
-        )
-        self.l1_conv4 = spconv.SparseSequential(
-            # [400, 352, 11] <- [200, 176, 5]
-            block(64*sf, 128*sf, 3, norm_fn=norm_fn, stride=2, padding=(1, 1, 1), indice_key='spconv4', conv_type='spconv'),
-            block(128*sf, 128*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
-            block(128*sf, 128*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
-        )
+        if pyramid_cfg['n_level'] > level:
+            norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
+            sf = int(1/alpha**level)
+            pool = spconv.SparseMaxPool3d(sf, sf, padding=sf//2)
+            self.l1_conv_input = spconv.SparseSequential(
+                pool,
+                spconv.SubMConv3d(input_channels, 16, 3, padding=1, bias=False, indice_key='subm1'),
+                norm_fn(16),
+                nn.ReLU(),
+            )
+            block = post_act_block
+            self.l1_conv1 = spconv.SparseSequential(
+                block(16, 16, 3, norm_fn=norm_fn, padding=1, indice_key='subm1'),
+            )
+            self.l1_conv2 = spconv.SparseSequential(
+                # [1600, 1408, 41] <- [800, 704, 21]
+                block(16, 32, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv2', conv_type='spconv'),
+                block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
+                block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
+                block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
+            )
+            self.l1_conv3 = spconv.SparseSequential(
+                # [800, 704, 21] <- [400, 352, 11]
+                block(32, 64, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv3', conv_type='spconv'),
+                block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
+                block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
+                block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
+            )
+            self.l1_conv4 = spconv.SparseSequential(
+                # [400, 352, 11] <- [200, 176, 5]
+                block(64, 128, 3, norm_fn=norm_fn, stride=2, padding=(1, 1, 1), indice_key='spconv4', conv_type='spconv'),
+                block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
+                block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
+                block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
+            )
+        
 
         level = 2
-        norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
-        sf = int(1/alpha**level)
-        pool = spconv.SparseMaxPool3d(sf, sf,  padding=sf//2)
-        self.l2_conv_input = spconv.SparseSequential(
-            pool,
-            spconv.SubMConv3d(input_channels, 16*sf, 3, padding=1, bias=False, indice_key='subm1'),
-            norm_fn(16*sf),
-            nn.ReLU(),
-        )
-        block = post_act_block
-        self.l2_conv1 = spconv.SparseSequential(
-            block(16*sf, 16*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm1'),
-        )
-        self.l2_conv2 = spconv.SparseSequential(
-            # [1600, 1408, 41] <- [800, 704, 21]
-            block(16*sf, 32*sf, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv2', conv_type='spconv'),
-            block(32*sf, 32*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
-            block(32*sf, 32*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
-        )
-        self.l2_conv3 = spconv.SparseSequential(
-            # [800, 704, 21] <- [400, 352, 11]
-            block(32*sf, 64*sf, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv3', conv_type='spconv'),
-            block(64*sf, 64*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
-            block(64*sf, 64*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
-        )
-        self.l2_conv4 = spconv.SparseSequential(
-            # [400, 352, 11] <- [200, 176, 5]
-            block(64*sf, 128*sf, 3, norm_fn=norm_fn, stride=2, padding=(1, 1, 1), indice_key='spconv4', conv_type='spconv'),
-            block(128*sf, 128*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
-            block(128*sf, 128*sf, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
-        )
+        if pyramid_cfg['n_level'] > level:
+            norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
+            sf = int(1/alpha**level)
+            pool = spconv.SparseMaxPool3d(sf, sf,  padding=sf//2)
+            self.l2_conv_input = spconv.SparseSequential(
+                pool,
+                spconv.SubMConv3d(input_channels, 16, 3, padding=1, bias=False, indice_key='subm1'),
+                norm_fn(16),
+                nn.ReLU(),
+            )
+            block = post_act_block
+            self.l2_conv1 = spconv.SparseSequential(
+                block(16, 16, 3, norm_fn=norm_fn, padding=1, indice_key='subm1'),
+            )
+            self.l2_conv2 = spconv.SparseSequential(
+                # [1600, 1408, 41] <- [800, 704, 21]
+                block(16, 32, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv2', conv_type='spconv'),
+                block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
+                block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
+                block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
+                block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
+            )
+            self.l2_conv3 = spconv.SparseSequential(
+                # [800, 704, 21] <- [400, 352, 11]
+                block(32, 64, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv3', conv_type='spconv'),
+                block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
+                block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
+                block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
+                block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
+            )
+            self.l2_conv4 = spconv.SparseSequential(
+                # [400, 352, 11] <- [200, 176, 5]
+                block(64, 128, 3, norm_fn=norm_fn, stride=2, padding=(1, 1, 1), indice_key='spconv4', conv_type='spconv'),
+                block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
+                block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
+                block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
+                block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
+            )
 
         last_pad = 0
         last_pad = self.model_cfg.get('last_pad', last_pad)
@@ -409,29 +422,28 @@ class VoxelBackBoneHiRes(nn.Module):
 
         self.num_point_features = 128
 
-        I=3
         J=4
 
-        self.obo_0_0 = spconv.SparseConv3d(16*(2**0)*(2**0),16*2**(J-1)*2**(I-1),1)
-        self.obo_0_1 = spconv.SparseConv3d(16*(2**1)*(2**0),16*2**(J-1)*2**(I-1),1)
-        self.obo_0_2 = spconv.SparseConv3d(16*(2**2)*(2**0),16*2**(J-1)*2**(I-1),1)
-        self.obo_0_3 = spconv.SparseConv3d(16*(2**3)*(2**0),16*2**(J-1)*2**(I-1),1)
-        self.obo_1_0 = spconv.SparseConv3d(16*(2**0)*(2**1),16*2**(J-1)*2**(I-1),1)
-        self.obo_1_1 = spconv.SparseConv3d(16*(2**1)*(2**1),16*2**(J-1)*2**(I-1),1)
-        self.obo_1_2 = spconv.SparseConv3d(16*(2**2)*(2**1),16*2**(J-1)*2**(I-1),1)
-        self.obo_1_3 = spconv.SparseConv3d(16*(2**3)*(2**1),16*2**(J-1)*2**(I-1),1)
-        self.obo_2_0 = spconv.SparseConv3d(16*(2**0)*(2**2),16*2**(J-1)*2**(I-1),1)
-        self.obo_2_1 = spconv.SparseConv3d(16*(2**1)*(2**2),16*2**(J-1)*2**(I-1),1)
-        self.obo_2_2 = spconv.SparseConv3d(16*(2**2)*(2**2),16*2**(J-1)*2**(I-1),1)
-        self.obo_2_3 = spconv.SparseConv3d(16*(2**3)*(2**2),16*2**(J-1)*2**(I-1),1)
+        self.obo_0_0 = spconv.SparseConv3d(16*(2**0),16*2**(J-1),1)
+        self.obo_0_1 = spconv.SparseConv3d(16*(2**1),16*2**(J-1),1)
+        self.obo_0_2 = spconv.SparseConv3d(16*(2**2),16*2**(J-1),1)
+        self.obo_0_3 = spconv.SparseConv3d(16*(2**3),16*2**(J-1),1)
+        self.obo_1_0 = spconv.SparseConv3d(16*(2**0),16*2**(J-1),1)
+        self.obo_1_1 = spconv.SparseConv3d(16*(2**1),16*2**(J-1),1)
+        self.obo_1_2 = spconv.SparseConv3d(16*(2**2),16*2**(J-1),1)
+        self.obo_1_3 = spconv.SparseConv3d(16*(2**3),16*2**(J-1),1)
+        self.obo_2_0 = spconv.SparseConv3d(16*(2**0),16*2**(J-1),1)
+        self.obo_2_1 = spconv.SparseConv3d(16*(2**1),16*2**(J-1),1)
+        self.obo_2_2 = spconv.SparseConv3d(16*(2**2),16*2**(J-1),1)
+        self.obo_2_3 = spconv.SparseConv3d(16*(2**3),16*2**(J-1),1)
 
 
         self.pool_2 = spconv.SparseMaxPool3d(2,stride=1)
 
-        self.final_convs_0 = spconv.SparseConv3d(16*2**(J-1)*2**(I-1),16*2**0,1)
-        self.final_convs_1 = spconv.SparseConv3d(16*2**(J-1)*2**(I-1),16*2**1,1)
-        self.final_convs_2 = spconv.SparseConv3d(16*2**(J-1)*2**(I-1),16*2**2,1)
-        self.final_convs_3 = spconv.SparseConv3d(16*2**(J-1)*2**(I-1),16*2**3,1)
+        self.final_convs_0 = spconv.SparseConv3d(16*2**(J-1),16*2**0,1)
+        self.final_convs_1 = spconv.SparseConv3d(16*2**(J-1),16*2**1,1)
+        self.final_convs_2 = spconv.SparseConv3d(16*2**(J-1),16*2**2,1)
+        self.final_convs_3 = spconv.SparseConv3d(16*2**(J-1),16*2**3,1)
 
     def forward(self, batch_dict):
         #("FORWARD?")
@@ -501,6 +513,7 @@ class VoxelBackBoneHiRes(nn.Module):
         for i in list(range(I))[::-1]:
             for j in list(range(J))[::-1]: 
                 #print(i, j)
+                #print ("\nSIZE= ", pyramids[i][j].features[0].size())
                 base = obo_convs[i][j](pyramids[i][j])
                 if i != I-1:
                     pass
@@ -509,6 +522,7 @@ class VoxelBackBoneHiRes(nn.Module):
                     for ii,_ in enumerate(up.spatial_shape):
                         up.spatial_shape[ii] *= 2
                     up = self.pool_2(up)
+                    # TODO: double check order
                     up.indices =  up.indices * torch.tensor([1,  2, 2, 2], device=base.features.device, dtype=torch.int32)
 
                     #print(base.indices.size())
@@ -518,9 +532,6 @@ class VoxelBackBoneHiRes(nn.Module):
 
                     #print (torch.max(up.indices, dim=0))
                     #print (torch.max(base.indices, dim=0))
-
-                    #base.features =  torch.cat((base.features, up.features), dim=0)
-                    #base.indices =  torch.cat((base.indices, up.indices), dim=0)
 
                     comb_inds, comb_feat =  sum_duplicates(base, up)
                     base.indices = comb_inds
