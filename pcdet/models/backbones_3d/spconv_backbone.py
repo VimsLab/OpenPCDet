@@ -277,17 +277,21 @@ def sum_duplicates(t1, t2):
     
     dup_index_of_unique =  torch.zeros(len(dup_indices), dtype=torch.long, device=comb_inds.device)
     dup_index_of_unique[dup_inverse_mapping] = torch.arange(len(comb_inds), dtype=torch.long, device=comb_inds.device)
-    # need to remove our dummy variable (off by one)
+    # remove our dummy variable (off by one)
     dup_index_of_unique = dup_index_of_unique[1:]
     dup_feat = comb_feat[dup_index_of_unique]
-    
-    #print("LEN ", dup_feat.size())
-    #print("SC ", (count>1).sum())
-    #print("LC ", (count>1).size())
-    #print("LF ", (new_features).size())
-    
+
     new_features[count>1]  += dup_feat
     return new_indices, new_features
+
+def prune_least_powerful_voxels(t, ord=2, max_size=40000):
+    weights  = torch.linalg.norm(t.features, ord=ord, dim=1)
+    w, inds = torch.topk(weights.view(-1), min(max_size, len(weights.view(-1))), sorted=False)
+    t.indices = t.indices[inds.view(-1)]
+    t.features = t.features[inds.view(-1)]
+    print("pf ", t.features.size())
+    print("pi ", t.indices.size())
+    return t
 
 class VoxelBackBoneHiRes(nn.Module):
     def __init__(self, model_cfg, input_channels, grid_size, **kwargs):
@@ -439,6 +443,8 @@ class VoxelBackBoneHiRes(nn.Module):
 
 
         self.pool_2 = spconv.SparseMaxPool3d(2,stride=1)
+        self.pool_2d = spconv.SparseMaxPool3d(2,stride=2)
+
 
         self.final_convs_0 = spconv.SparseConv3d(16*2**(J-1),16*2**0,1)
         self.final_convs_1 = spconv.SparseConv3d(16*2**(J-1),16*2**1,1)
@@ -446,7 +452,6 @@ class VoxelBackBoneHiRes(nn.Module):
         self.final_convs_3 = spconv.SparseConv3d(16*2**(J-1),16*2**3,1)
 
     def forward(self, batch_dict):
-        #("FORWARD?")
         """
         Args:
             batch_dict:
@@ -512,40 +517,40 @@ class VoxelBackBoneHiRes(nn.Module):
         J = len(pyramids[0])
         for i in list(range(I))[::-1]:
             for j in list(range(J))[::-1]: 
-                #print(i, j)
+                print(i, j)
                 #print ("\nSIZE= ", pyramids[i][j].features[0].size())
                 base = obo_convs[i][j](pyramids[i][j])
                 if i != I-1:
-                    pass
-                    #base = spconv.SparseConvTensor.from_dense(nn.Upsample(size=base.dense().size()[2:], mode='nearest')(pyramids[i+1][j].dense()) +  base.dense())
                     up = pyramids[i+1][j]
                     for ii,_ in enumerate(up.spatial_shape):
                         up.spatial_shape[ii] *= 2
-                    up = self.pool_2(up)
-                    # TODO: double check order
                     up.indices =  up.indices * torch.tensor([1,  2, 2, 2], device=base.features.device, dtype=torch.int32)
-
-                    #print(base.indices.size())
-                    #print(torch.unique(base.indices, dim=0).size())
-                    #print(up.indices.size())
-                    #print(torch.unique(up.indices, dim=0).size())
-
-                    #print (torch.max(up.indices, dim=0))
-                    #print (torch.max(base.indices, dim=0))
-
+                    up = self.pool_2(up)
                     comb_inds, comb_feat =  sum_duplicates(base, up)
                     base.indices = comb_inds
                     base.features = comb_feat
-
-
-                    #print(base.indices.size())
-                    #print(torch.unique(base.indices, dim=0).size())
                 if j != J-1:
-                    pass
-                    #base  += nn.Upsample(size=base.size()[2:], mode='nearest')(pyramids[i][j+1])
-                if i == 0:
-                    base = final_convs[j](base)
+                    '''
+                    # This doesn;t work, but we dont need  it anyway
+                    back = pyramids[i][j+1]
+                    for ii,_ in enumerate(back.spatial_shape):
+                        back.spatial_shape[ii] *= 2
+                    back.indices =  back.indices * torch.tensor([1,  2, 2, 2], device=base.features.device, dtype=torch.int32)
+                    back = self.pool_2(back)
+                    comb_inds, comb_feat =  sum_duplicates(base, back)
+                    base.indices = comb_inds
+                    base.features = comb_feat
+                    # restore old_dim
+                    back = self.pool_2d(back)
+                    '''
+                    ...
+                # Not sure if  we want to cap the num voxels
+                base = prune_least_powerful_voxels(base)
                 pyramids[i][j] = base
+
+        for j in range(4):
+             pyramids[0][j] = final_convs[j](pyramids[0][j])
+
 
         x_conv1, x_conv2, x_conv3, x_conv4  = pyramids[0]
         out = self.conv_out(x_conv4)
@@ -562,5 +567,7 @@ class VoxelBackBoneHiRes(nn.Module):
                 'x_conv4': x_conv4,
             }
         })
+
+        print("WHAT ID DA PROBLEM EH?")
 
         return batch_dict
