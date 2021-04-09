@@ -289,8 +289,6 @@ def prune_least_powerful_voxels(t, ord=2, max_size=40000):
     w, inds = torch.topk(weights.view(-1), min(max_size, len(weights.view(-1))), sorted=False)
     t.indices = t.indices[inds.view(-1)]
     t.features = t.features[inds.view(-1)]
-    print("pf ", t.features.size())
-    print("pi ", t.indices.size())
     return t
 
 class VoxelBackBoneHiRes(nn.Module):
@@ -355,19 +353,16 @@ class VoxelBackBoneHiRes(nn.Module):
                 block(16, 32, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv2', conv_type='spconv'),
                 block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
                 block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
-                block(32, 32, 3, norm_fn=norm_fn, padding=1, indice_key='subm2'),
             )
             self.l1_conv3 = spconv.SparseSequential(
                 # [800, 704, 21] <- [400, 352, 11]
                 block(32, 64, 3, norm_fn=norm_fn, stride=2, padding=1, indice_key='spconv3', conv_type='spconv'),
                 block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
                 block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
-                block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
             )
             self.l1_conv4 = spconv.SparseSequential(
                 # [400, 352, 11] <- [200, 176, 5]
                 block(64, 128, 3, norm_fn=norm_fn, stride=2, padding=(1, 1, 1), indice_key='spconv4', conv_type='spconv'),
-                block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
                 block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
                 block(128, 128, 3, norm_fn=norm_fn, padding=1, indice_key='subm4'),
             )
@@ -428,28 +423,28 @@ class VoxelBackBoneHiRes(nn.Module):
 
         J=4
 
-        self.obo_0_0 = spconv.SparseConv3d(16*(2**0),16*2**(J-1),1)
-        self.obo_0_1 = spconv.SparseConv3d(16*(2**1),16*2**(J-1),1)
-        self.obo_0_2 = spconv.SparseConv3d(16*(2**2),16*2**(J-1),1)
-        self.obo_0_3 = spconv.SparseConv3d(16*(2**3),16*2**(J-1),1)
-        self.obo_1_0 = spconv.SparseConv3d(16*(2**0),16*2**(J-1),1)
-        self.obo_1_1 = spconv.SparseConv3d(16*(2**1),16*2**(J-1),1)
-        self.obo_1_2 = spconv.SparseConv3d(16*(2**2),16*2**(J-1),1)
-        self.obo_1_3 = spconv.SparseConv3d(16*(2**3),16*2**(J-1),1)
-        self.obo_2_0 = spconv.SparseConv3d(16*(2**0),16*2**(J-1),1)
-        self.obo_2_1 = spconv.SparseConv3d(16*(2**1),16*2**(J-1),1)
-        self.obo_2_2 = spconv.SparseConv3d(16*(2**2),16*2**(J-1),1)
-        self.obo_2_3 = spconv.SparseConv3d(16*(2**3),16*2**(J-1),1)
+        self.obo_0_0 = spconv.SparseConv3d(16*(2**0),16*(2**0),1)
+        self.obo_0_1 = spconv.SparseConv3d(16*(2**1),16*(2**1),1)
+        self.obo_0_2 = spconv.SparseConv3d(16*(2**2),16*(2**2),1)
+        self.obo_0_3 = spconv.SparseConv3d(16*(2**3),16*(2**3),1)
+        self.obo_1_0 = spconv.SparseConv3d(16*(2**0),16*(2**0),1)
+        self.obo_1_1 = spconv.SparseConv3d(16*(2**1),16*(2**1),1)
+        self.obo_1_2 = spconv.SparseConv3d(16*(2**2),16*(2**2),1)
+        self.obo_1_3 = spconv.SparseConv3d(16*(2**3),16*(2**3),1)
+        self.obo_2_0 = spconv.SparseConv3d(16*(2**0),16*(2**0),1)
+        self.obo_2_1 = spconv.SparseConv3d(16*(2**1),16*(2**1),1)
+        self.obo_2_2 = spconv.SparseConv3d(16*(2**2),16*(2**2),1)
+        self.obo_2_3 = spconv.SparseConv3d(16*(2**3),16*(2**3),1)
 
 
         self.pool_2 = spconv.SparseMaxPool3d(2,stride=1)
         self.pool_2d = spconv.SparseMaxPool3d(2,stride=2)
 
 
-        self.final_convs_0 = spconv.SparseConv3d(16*2**(J-1),16*2**0,1)
-        self.final_convs_1 = spconv.SparseConv3d(16*2**(J-1),16*2**1,1)
-        self.final_convs_2 = spconv.SparseConv3d(16*2**(J-1),16*2**2,1)
-        self.final_convs_3 = spconv.SparseConv3d(16*2**(J-1),16*2**3,1)
+        #self.final_convs_0 = spconv.SparseConv3d(16*2**(J-1),16*2**0,1)
+        #self.final_convs_1 = spconv.SparseConv3d(16*2**(J-1),16*2**1,1)
+        #self.final_convs_2 = spconv.SparseConv3d(16*2**(J-1),16*2**2,1)
+        #self.final_convs_3 = spconv.SparseConv3d(16*2**(J-1),16*2**3,1)
 
     def forward(self, batch_dict):
         """
@@ -511,13 +506,13 @@ class VoxelBackBoneHiRes(nn.Module):
                      [self.obo_1_0, self.obo_1_1, self.obo_1_2, self.obo_1_3], 
                      [self.obo_2_0, self.obo_2_1, self.obo_2_2, self.obo_2_3]]
 
-        final_convs = [self.final_convs_0,  self.final_convs_1, self.final_convs_2, self.final_convs_3]
+        #final_convs = [self.final_convs_0,  self.final_convs_1, self.final_convs_2, self.final_convs_3]
     
         I = len(pyramids)
         J = len(pyramids[0])
         for i in list(range(I))[::-1]:
             for j in list(range(J))[::-1]: 
-                print(i, j)
+                # print(i, j)
                 #print ("\nSIZE= ", pyramids[i][j].features[0].size())
                 base = obo_convs[i][j](pyramids[i][j])
                 if i != I-1:
@@ -530,8 +525,8 @@ class VoxelBackBoneHiRes(nn.Module):
                     base.indices = comb_inds
                     base.features = comb_feat
                 if j != J-1:
-                    '''
                     # This doesn;t work, but we dont need  it anyway
+                    '''
                     back = pyramids[i][j+1]
                     for ii,_ in enumerate(back.spatial_shape):
                         back.spatial_shape[ii] *= 2
@@ -544,12 +539,12 @@ class VoxelBackBoneHiRes(nn.Module):
                     back = self.pool_2d(back)
                     '''
                     ...
-                # Not sure if  we want to cap the num voxels
+                # Not sure if  we want to cap the num voxels (we  will for now)
                 base = prune_least_powerful_voxels(base)
                 pyramids[i][j] = base
 
-        for j in range(4):
-             pyramids[0][j] = final_convs[j](pyramids[0][j])
+        #for j in range(4):
+        #     pyramids[0][j] = final_convs[j](pyramids[0][j])
 
 
         x_conv1, x_conv2, x_conv3, x_conv4  = pyramids[0]
@@ -567,7 +562,5 @@ class VoxelBackBoneHiRes(nn.Module):
                 'x_conv4': x_conv4,
             }
         })
-
-        print("WHAT ID DA PROBLEM EH?")
 
         return batch_dict
