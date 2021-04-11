@@ -420,27 +420,24 @@ class VoxelBackBoneHiRes(nn.Module):
         )
 
         self.num_point_features = 128
-
-        J=4
-
         self.obo_0_0 = spconv.SparseConv3d(16*(2**0),16*(2**0),1)
         self.obo_0_1 = spconv.SparseConv3d(16*(2**1),16*(2**1),1)
         self.obo_0_2 = spconv.SparseConv3d(16*(2**2),16*(2**2),1)
         self.obo_0_3 = spconv.SparseConv3d(16*(2**3),16*(2**3),1)
-        self.obo_1_0 = spconv.SparseConv3d(16*(2**0),16*(2**0),1)
-        self.obo_1_1 = spconv.SparseConv3d(16*(2**1),16*(2**1),1)
-        self.obo_1_2 = spconv.SparseConv3d(16*(2**2),16*(2**2),1)
-        self.obo_1_3 = spconv.SparseConv3d(16*(2**3),16*(2**3),1)
-        self.obo_2_0 = spconv.SparseConv3d(16*(2**0),16*(2**0),1)
-        self.obo_2_1 = spconv.SparseConv3d(16*(2**1),16*(2**1),1)
-        self.obo_2_2 = spconv.SparseConv3d(16*(2**2),16*(2**2),1)
-        self.obo_2_3 = spconv.SparseConv3d(16*(2**3),16*(2**3),1)
+        self.obo_1_0 = spconv.SparseConvTranspose3d(16*(2**0),16*(2**0),2,stride=2)
+        self.obo_1_1 = spconv.SparseConvTranspose3d(16*(2**1),16*(2**1),2,stride=2)
+        self.obo_1_2 = spconv.SparseConvTranspose3d(16*(2**2),16*(2**2),2,stride=2)
+        self.obo_1_3 = spconv.SparseConvTranspose3d(16*(2**3),16*(2**3),2,stride=2)
+        self.obo_2_0 = spconv.SparseConvTranspose3d(16*(2**0),16*(2**0),2,stride=2)
+        self.obo_2_1 = spconv.SparseConvTranspose3d(16*(2**1),16*(2**1),2,stride=2)
+        self.obo_2_2 = spconv.SparseConvTranspose3d(16*(2**2),16*(2**2),2,stride=2)
+        self.obo_2_3 = spconv.SparseConvTranspose3d(16*(2**3),16*(2**3),2,stride=2)
 
 
-        self.pool_2 = spconv.SparseMaxPool3d(2,stride=1)
-        self.pool_2d = spconv.SparseMaxPool3d(2,stride=2)
+        #self.pool_2 = spconv.SparseMaxPool3d(2,stride=1)
+        #self.pool_2d = spconv.SparseMaxPool3d(2,stride=2)
 
-
+        J=4
         #self.final_convs_0 = spconv.SparseConv3d(16*2**(J-1),16*2**0,1)
         #self.final_convs_1 = spconv.SparseConv3d(16*2**(J-1),16*2**1,1)
         #self.final_convs_2 = spconv.SparseConv3d(16*2**(J-1),16*2**2,1)
@@ -512,41 +509,33 @@ class VoxelBackBoneHiRes(nn.Module):
         J = len(pyramids[0])
         for i in list(range(I))[::-1]:
             for j in list(range(J))[::-1]: 
-                # print(i, j)
-                #print ("\nSIZE= ", pyramids[i][j].features[0].size())
                 base = obo_convs[i][j](pyramids[i][j])
                 if i != I-1:
                     up = pyramids[i+1][j]
-                    for ii,_ in enumerate(up.spatial_shape):
-                        up.spatial_shape[ii] *= 2
-                    up.indices =  up.indices * torch.tensor([1,  2, 2, 2], device=base.features.device, dtype=torch.int32)
-                    up = self.pool_2(up)
                     comb_inds, comb_feat =  sum_duplicates(base, up)
                     base.indices = comb_inds
                     base.features = comb_feat
                 if j != J-1:
                     # This doesn;t work, but we dont need  it anyway
-                    '''
-                    back = pyramids[i][j+1]
-                    for ii,_ in enumerate(back.spatial_shape):
-                        back.spatial_shape[ii] *= 2
-                    back.indices =  back.indices * torch.tensor([1,  2, 2, 2], device=base.features.device, dtype=torch.int32)
-                    back = self.pool_2(back)
-                    comb_inds, comb_feat =  sum_duplicates(base, back)
-                    base.indices = comb_inds
-                    base.features = comb_feat
-                    # restore old_dim
-                    back = self.pool_2d(back)
-                    '''
+                    #back = pyramids[i][j+1]
+                    #for ii,_ in enumerate(back.spatial_shape):
+                    #    back.spatial_shape[ii] *= 2
+                    #back.indices =  back.indices * torch.tensor([1,  2, 2, 2], device=base.features.device, dtype=torch.int32)
+                    #back = self.pool_2(back)
+                    #comb_inds, comb_feat =  sum_duplicates(base, back)
+                    #base.indices = comb_inds
+                    #base.features = comb_feat
+                    ## restore old_dim
+                    #back = self.pool_2d(back)
+                    
                     ...
                 # Not sure if  we want to cap the num voxels (we  will for now)
                 base = prune_least_powerful_voxels(base)
                 pyramids[i][j] = base
-
+        '''
         #for j in range(4):
         #     pyramids[0][j] = final_convs[j](pyramids[0][j])
-
-
+        '''
         x_conv1, x_conv2, x_conv3, x_conv4  = pyramids[0]
         out = self.conv_out(x_conv4)
 
